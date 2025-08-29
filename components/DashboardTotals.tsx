@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useState } from 'react'
 import { subscribe } from '@/lib/realtime'
-import type { Student } from '@/types'
+import type { Student } from '@/types/student-types'
 
 export function DashboardTotals() {
   const [studentsCount, setStudentsCount] = useState<number | null>(null)
