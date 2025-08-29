@@ -39,8 +39,8 @@ export default function StudentDetailsPage() {
         <CardContent className="grid sm:grid-cols-2 gap-3 text-sm">
           <div><span className="text-muted-foreground">Class:</span> {student?.className ?? '—'}</div>
           <div><span className="text-muted-foreground">Group:</span> {student?.classGroup ?? '—'}</div>
-          <div><span className="text-muted-foreground">Phone:</span> {student?.phone ?? '—'}</div>
-          <div><span className="text-muted-foreground">Guardian:</span> {student?.guardianName ?? '—'}</div>
+          <div><span className="text-muted-foreground">Contact:</span> {student?.parentContact ?? '—'}</div>
+          <div><span className="text-muted-foreground">Address:</span> {student?.address ?? '—'}</div>
           <div><span className="text-muted-foreground">Total Paid:</span> {student?.totalPaid ?? 0}</div>
           <div><span className="text-muted-foreground">Outstanding:</span> {student?.totalOwed ?? 0}</div>
         </CardContent>
