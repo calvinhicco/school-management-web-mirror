@@ -1,12 +1,12 @@
 "use client"
 import { useEffect, useState } from 'react'
-import { subscribeAll, subscribeOne } from '@/lib/realtime'
-import type { Student } from '@/types/student-types'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { collection, getDocs, query, orderBy } from 'firebase/firestore'
+import { db } from '@/lib/firebaseClient'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ReadonlyTooltip } from '@/components/Readonly'
-import { AlertTriangle, Plus, DollarSign, User, Phone, FileText, AlertCircle } from 'lucide-react'
+import { AlertTriangle, Plus, DollarSign, User, Phone, FileText, AlertCircle, Loader2 } from 'lucide-react'
 
 interface AppSettings {
   billingCycle: 'MONTHLY' | 'TERMLY'
@@ -14,82 +14,92 @@ interface AppSettings {
   classGroups: Array<{ id: string; name: string; fee: number }>
 }
 
+interface OutstandingStudent {
+  id: string
+  studentId: string
+  fullName: string
+  parentContact: string
+  className: string
+  classGroup: string
+  admissionDate: string
+  hasTransport: boolean
+  transportFee: number
+  feePayments: Array<{ amount: number; paid: boolean; date: string }>
+  transportPayments: Array<{ amount: number; paid: boolean; date: string }>
+  outstandingAmount: number
+  status: 'Paid in Full' | 'Partial Payment' | 'Outstanding'
+}
+
 export default function OutstandingPage() {
-  const [students, setStudents] = useState<Student[]>([])
+  const [outstandingStudents, setOutstandingStudents] = useState<OutstandingStudent[]>([])
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const unsubStudents = subscribeAll<Student>('students', setStudents)
-    const unsubSettings = subscribeOne<AppSettings>('settings', 'appSettings', (data) => {
-      setSettings(data)
-      setLoading(false)
-    })
-
-    return () => {
-      unsubStudents && unsubStudents()
-      unsubSettings && unsubSettings()
+    const fetchOutstandingStudents = async () => {
+      try {
+        // Fetch outstanding students
+        const outstandingRef = collection(db, 'outstandingStudents')
+        const q = query(outstandingRef, orderBy('outstandingAmount', 'desc'))
+        const querySnapshot = await getDocs(q)
+        
+        const studentsData = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as OutstandingStudent[]
+        
+        setOutstandingStudents(studentsData)
+        
+        // Fetch settings
+        const settingsDoc = await getDocs(collection(db, 'settings'))
+        if (!settingsDoc.empty) {
+          const settingsData = settingsDoc.docs[0].data() as AppSettings
+          setSettings(settingsData)
+        }
+        
+        setLoading(false)
+      } catch (err) {
+        console.error('Error fetching data:', err)
+        setError('Failed to load outstanding students. Please try again later.')
+        setLoading(false)
+      }
     }
+
+    fetchOutstandingStudents()
   }, [])
 
-  const calculateOutstanding = (student: Student): number => {
-    if (!settings || !student.admissionDate) return 0
-
-    const admissionDate = new Date(student.admissionDate)
-    const currentDate = new Date()
-    
-    // Find class group fee
-    const classGroup = settings.classGroups?.find(g => g.id === student.classGroup)
-    const monthlyFee = classGroup?.fee || 0
-    
-    let monthsOwed = 0
-    if (settings.billingCycle === 'MONTHLY') {
-      const monthsDiff = (currentDate.getFullYear() - admissionDate.getFullYear()) * 12 + 
-                        (currentDate.getMonth() - admissionDate.getMonth())
-      monthsOwed = Math.max(0, monthsDiff)
-    } else {
-      // Termly billing - simplified calculation
-      const yearsDiff = currentDate.getFullYear() - admissionDate.getFullYear()
-      monthsOwed = Math.max(0, yearsDiff * 12)
-    }
-
-    const totalOwed = monthsOwed * monthlyFee
-    const totalPaid = student.feePayments?.reduce((sum, payment) => 
-      payment.paid ? sum + (payment.amount || 0) : sum, 0) || 0
-    
-    // Add transport fees if applicable
-    let transportOwed = 0
-    if (student.hasTransport && student.transportFee) {
-      transportOwed = monthsOwed * student.transportFee
-      const transportPaid = student.transportPayments?.reduce((sum, payment) => 
-        payment.paid ? sum + (payment.amount || 0) : sum, 0) || 0
-      transportOwed -= transportPaid
-    }
-
-    return Math.max(0, totalOwed - totalPaid + transportOwed)
-  }
-
-  const getPaymentStatus = (student: Student) => {
-    const outstanding = calculateOutstanding(student)
-    if (outstanding === 0) {
+  const getPaymentStatus = (student: OutstandingStudent) => {
+    if (student.status === 'Paid in Full') {
       return { status: 'Paid in Full', color: 'green', icon: AlertCircle }
-    } else if (student.feePayments?.some(p => p.paid)) {
+    } else if (student.status === 'Partial Payment') {
       return { status: 'Partial Payment', color: 'yellow', icon: AlertTriangle }
     } else {
       return { status: 'Outstanding', color: 'red', icon: AlertTriangle }
     }
   }
 
-  // Filter students with outstanding balances
-  const outstandingStudents = students.filter(student => calculateOutstanding(student) > 0)
-  const totalOutstanding = outstandingStudents.reduce((sum, student) => sum + calculateOutstanding(student), 0)
+  const totalOutstanding = outstandingStudents.reduce((sum, student) => sum + (student.outstandingAmount || 0), 0)
 
   if (loading) {
     return (
-      <div className="max-w-5xl mx-auto p-6 space-y-6">
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
-        </div>
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-5xl mx-auto p-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Error</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-destructive">{error}</p>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -138,12 +148,8 @@ export default function OutstandingPage() {
               </div>
             ) : (
               outstandingStudents
-                .sort((a, b) => calculateOutstanding(b) - calculateOutstanding(a))
                 .map((student) => {
                   const { status, icon: StatusIcon } = getPaymentStatus(student)
-                  const outstandingAmount = calculateOutstanding(student)
-
-                  // Find class group for display
                   const classGroup = settings?.classGroups?.find(g => g.id === student.classGroup)
 
                   return (
@@ -164,7 +170,7 @@ export default function OutstandingPage() {
                             </span>
                             <span className="flex items-center gap-1">
                               <FileText className="w-3 h-3" />
-                              {student.className || "No class assigned"}
+                              {student.className || classGroup?.name || "No class assigned"}
                             </span>
                           </div>
                           <div className="flex items-center gap-4 text-xs text-gray-500 mt-1">
@@ -185,7 +191,7 @@ export default function OutstandingPage() {
                         <div className="text-right">
                           <div className="flex items-center gap-1 text-lg font-bold text-red-600">
                             <DollarSign className="w-4 h-4" />
-                            {outstandingAmount.toLocaleString()}
+                            {student.outstandingAmount?.toLocaleString() || '0'}
                           </div>
                           <p className="text-xs text-gray-600">outstanding since enrollment</p>
                           <p className="text-xs text-red-500 font-medium">
@@ -199,7 +205,7 @@ export default function OutstandingPage() {
                               ? "default"
                               : status === "Partial Payment"
                                 ? "outline"
-                                : "destructive"
+                                : "secondary"
                           }
                           className="flex items-center gap-1"
                         >
