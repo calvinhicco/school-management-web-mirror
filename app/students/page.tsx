@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { subscribe } from '@/lib/realtime'
-import type { Student } from '@/types'
+import type { Student } from '@/types/student-types'
 import { Button } from '@/components/ui/button'
 import { ReadonlyTooltip } from '@/components/Readonly'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
