@@ -4,11 +4,11 @@ import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 
 const items = [
-  { href: '/', label: 'Dashboard' },
-  { href: '/students', label: 'Students' },
-  { href: '/expenses', label: 'Expenses' },
-  { href: '/extrabilling', label: 'ExtraBilling' },
-  { href: '/outstanding', label: 'Outstanding' },
+  { href: '/' as const, label: 'Dashboard' },
+  { href: '/students' as const, label: 'Students' },
+  { href: '/expenses' as const, label: 'Expenses' },
+  { href: '/extrabilling' as const, label: 'ExtraBilling' },
+  { href: '/outstanding' as const, label: 'Outstanding' },
 ]
 
 export function Nav() {
